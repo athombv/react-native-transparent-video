@@ -87,7 +87,8 @@ class VideoRenderer implements GLTextureView.Renderer, SurfaceTexture.OnFrameAva
             + "void main() {\n"
             + "  vec4 color = texture2D(sTexture, vec2(vTextureCoord.x, vTextureCoord.y / 2.0));\n"
             + "  float alpha = texture2D(sTexture, vec2(vTextureCoord.x, 0.5 + vTextureCoord.y / 2.0)).r;\n"
-            + "  gl_FragColor = vec4(color.rgb, alpha);\n"
+            + "  float flooredAlpha = alpha <= 0.1 ? 0.0 : alpha;\n"
+            + "  gl_FragColor = vec4(color.rgb, flooredAlpha);\n"
             + "}\n";
 
     private double accuracy = 0.95;
