@@ -54,6 +54,11 @@ npm-debug.log
 yarn-debug.log
 yarn-error.log
 
+# Yarn
+.yarn/*
+!.yarn/releases
+!.yarn/patches
+
 # BUCK
 buck-out/
 \.buckd/
