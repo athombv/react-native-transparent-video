@@ -43,17 +43,6 @@ class TransparentVideoView : UIView {
     }
   }
 
-  @objc var loop: Bool = Bool() {
-    didSet {
-      self.videoLoop = loop
-      self.playerView?.isLoopingEnabled = loop
-      let player = self.playerView?.player
-      if (loop && (player?.rate == 0 || player?.error != nil)) {
-        player?.play()
-      }
-    }
-  }
-
   @objc var autoplay: Bool = Bool() {
     didSet {
       self.videoAutoplay = autoplay
