@@ -10,15 +10,15 @@ import AVFoundation
 import UIKit
 
 public class AVPlayerView: UIView {
-    
+
     deinit {
         playerItem = nil
     }
-    
+
     public override class var layerClass: AnyClass {
         return AVPlayerLayer.self
     }
-    
+
     public var playerLayer: AVPlayerLayer {
         return layer as! AVPlayerLayer
     }
@@ -27,7 +27,7 @@ public class AVPlayerView: UIView {
         set { playerLayer.player = newValue }
         get { return playerLayer.player }
     }
-    
+
     private var playerItemStatusObserver: NSKeyValueObservation?
 
     private(set) var playerItem: AVPlayerItem? = nil {
@@ -36,7 +36,7 @@ public class AVPlayerView: UIView {
             setupLooping()
         }
     }
-    
+
     public func loadPlayerItem(_ playerItem: AVPlayerItem, onReady: ((Result<AVPlayer, Error>) -> Void)? = nil) {
         let player = AVPlayer(playerItem: playerItem)
 
@@ -63,16 +63,14 @@ public class AVPlayerView: UIView {
             }
         }
     }
-    
-    // MARK: - Looping Handler
-    
+
     /// When set to `true`, the player view automatically adds an observer on its AVPlayer,
     /// and it will play again from start every time playback ends.
     /// * Warning: This will not result in a smooth video loop.
     public var isLoopingEnabled: Bool = false {
         didSet { setupLooping() }
     }
-    
+
     private var didPlayToEndTimeObsever: NSObjectProtocol? = nil {
         willSet(newObserver) {
             // When updating didPlayToEndTimeObserver,
@@ -82,22 +80,29 @@ public class AVPlayerView: UIView {
             }
         }
     }
-    
+
     private func setupLooping() {
         guard let playerItem = self.playerItem, let player = self.player else {
             return
         }
-        
+
         guard isLoopingEnabled else {
             didPlayToEndTimeObsever = nil
             return
         }
-        
+
         didPlayToEndTimeObsever = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: playerItem, queue: nil, using: { _ in
                 player.seek(to: CMTime.zero) { _ in
                     player.play()
                 }
         })
+    }
+
+    /// When set to `true`, the audio of the video will be muted.
+    public var isMuted: Bool = true {  // Default set to true (muted by default)
+        didSet {
+            player?.isMuted = isMuted
+        }
     }
 }

@@ -136,6 +136,7 @@ public class AlphaMovieView extends GLTextureView {
         mediaPlayer = new MediaPlayer();
         setScreenOnWhilePlaying(true);
         setLooping(true);
+        setVolume(0, 0);
         mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mp) {
@@ -538,6 +539,10 @@ public class AlphaMovieView extends GLTextureView {
 
     public void setLooping(boolean looping) {
         mediaPlayer.setLooping(looping);
+    }
+
+    public void setVolume(float leftVolume, float rightVolume) {
+        mediaPlayer.setVolume(leftVolume, rightVolume);
     }
 
     public int getCurrentPosition() {
