@@ -40,6 +40,16 @@ public class AVPlayerView: UIView {
     public func loadPlayerItem(_ playerItem: AVPlayerItem, onReady: ((Result<AVPlayer, Error>) -> Void)? = nil) {
         let player = AVPlayer(playerItem: playerItem)
 
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print(error)
+        }
+
+        // Set the player to be muted
+        player.isMuted = true
+
         self.player = player
         self.playerItem = playerItem
 
