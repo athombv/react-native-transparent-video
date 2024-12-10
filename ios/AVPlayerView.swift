@@ -1,14 +1,7 @@
-//
-//  AVPlayerView.swift
-//  MyTransparentVideoExample
-//
-//  Created by Quentin on 27/10/2017.
-//  Copyright © 2017 Quentin Fasquel. All rights reserved.
-//
-
 import AVFoundation
 import UIKit
 
+/// A custom UIView subclass that encapsulates an AVPlayerLayer to handle video playback with additional features.
 public class AVPlayerView: UIView {
 
     deinit {
@@ -24,19 +17,43 @@ public class AVPlayerView: UIView {
     }
 
     public private(set) var player: AVPlayer? {
-        set { playerLayer.player = newValue }
         get { return playerLayer.player }
+        set { playerLayer.player = newValue }
+    }
+
+    /// When enabled, the player view automatically restarts playback when it ends.
+    /// - Warning: Enabling this does not ensure a smooth looping experience.
+    public var isLoopingEnabled: Bool = false {
+        didSet { setupLooping() }
+    }
+
+    /// When set to `true`, the audio of the video will be muted. Defaults to `true`.
+    public var isMuted: Bool = true {
+        didSet { player?.isMuted = isMuted }
     }
 
     private var playerItemStatusObserver: NSKeyValueObservation?
-
+    private var didPlayToEndTimeObserver: NSObjectProtocol? = nil {
+        willSet {
+            // Automatically remove the old observer before setting a new one.
+            if let observer = didPlayToEndTimeObserver, didPlayToEndTimeObserver !== newValue {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
+    }
     private(set) var playerItem: AVPlayerItem? = nil {
         didSet {
-            // If `isLoopingEnabled` is called before the AVPlayer was set
             setupLooping()
         }
     }
 
+    /**
+     Loads a new AVPlayerItem and prepares the player for playback.
+
+     - Parameters:
+        - playerItem: The AVPlayerItem to be loaded.
+        - onReady: A closure invoked when the player is ready or if an error occurs.
+     */
     public func loadPlayerItem(_ playerItem: AVPlayerItem, onReady: ((Result<AVPlayer, Error>) -> Void)? = nil) {
         let player = AVPlayer(playerItem: playerItem)
 
@@ -44,11 +61,12 @@ public class AVPlayerView: UIView {
             try AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print(error)
+            print("Failed to configure AVAudioSession: \(error.localizedDescription)")
         }
 
-        // Set the player to be muted
+        // Configure player settings
         player.isMuted = true
+        player.preventsDisplaySleepDuringVideoPlayback = false
 
         self.player = player
         self.playerItem = playerItem
@@ -60,59 +78,33 @@ public class AVPlayerView: UIView {
 
         playerItemStatusObserver = playerItem.observe(\.status) { [weak self] item, _ in
             switch item.status {
-            case .failed:
-                completion(.failure(item.error!))
             case .readyToPlay:
                 completion(.success(player))
-                // Stop observing
                 self?.playerItemStatusObserver = nil
+            case .failed:
+                completion(.failure(item.error ?? NSError(domain: "Unknown Error", code: -1, userInfo: nil)))
             case .unknown:
                 break
             @unknown default:
-                fatalError()
-            }
-        }
-    }
-
-    /// When set to `true`, the player view automatically adds an observer on its AVPlayer,
-    /// and it will play again from start every time playback ends.
-    /// * Warning: This will not result in a smooth video loop.
-    public var isLoopingEnabled: Bool = false {
-        didSet { setupLooping() }
-    }
-
-    private var didPlayToEndTimeObsever: NSObjectProtocol? = nil {
-        willSet(newObserver) {
-            // When updating didPlayToEndTimeObserver,
-            // automatically remove its previous value from the Notification Center
-            if let observer = didPlayToEndTimeObsever, didPlayToEndTimeObsever !== newObserver {
-                NotificationCenter.default.removeObserver(observer)
+                fatalError("Unhandled AVPlayerItem status case.")
             }
         }
     }
 
     private func setupLooping() {
-        guard let playerItem = self.playerItem, let player = self.player else {
+        guard isLoopingEnabled, let playerItem = self.playerItem, let player = self.player else {
+            didPlayToEndTimeObserver = nil
             return
         }
 
-        guard isLoopingEnabled else {
-            didPlayToEndTimeObsever = nil
-            return
-        }
-
-        didPlayToEndTimeObsever = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime, object: playerItem, queue: nil, using: { _ in
-                player.seek(to: CMTime.zero) { _ in
-                    player.play()
-                }
-        })
-    }
-
-    /// When set to `true`, the audio of the video will be muted.
-    public var isMuted: Bool = true {  // Default set to true (muted by default)
-        didSet {
-            player?.isMuted = isMuted
+        didPlayToEndTimeObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem,
+            queue: nil
+        ) { _ in
+            player.seek(to: .zero) { _ in
+                player.play()
+            }
         }
     }
 }
