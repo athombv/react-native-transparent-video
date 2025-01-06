@@ -4,7 +4,7 @@ import os.log
 @objc(TransparentVideoViewManager)
 class TransparentVideoViewManager: RCTViewManager {
 
-  override func view() -> (TransparentVideoView) {
+  override func view() -> TransparentVideoView {
     return TransparentVideoView()
   }
 
@@ -13,23 +13,22 @@ class TransparentVideoViewManager: RCTViewManager {
   }
 }
 
-class TransparentVideoView : UIView {
+class TransparentVideoView: UIView {
 
   private var source: VideoSource?
   private var playerView: AVPlayerView?
   private var videoAutoplay: Bool?
   private var videoLoop: Bool?
 
-  @objc var loop: Bool = Bool() {
+  @objc var loop: Bool = false {
     didSet {
-      if (self.playerView != nil) {
-        // Reset looping on value changes.
-        self.playerView?.isLoopingEnabled = loop
+      // Set up looping behavior
+      if let playerView = self.playerView {
+        playerView.isLoopingEnabled = loop
 
-        let player = self.playerView?.player
-
-        if (loop && (player?.rate == 0 || player?.error != nil)) {
-          player?.play()
+        // Start playing immediately if autoplay is enabled and loop is set
+        if loop && (playerView.player?.rate == 0 || playerView.player?.error != nil) {
+          playerView.player?.play()
         }
       }
     }
@@ -37,25 +36,25 @@ class TransparentVideoView : UIView {
 
   @objc var src: NSDictionary = NSDictionary() {
     didSet {
+      // Update the video source and reload video
       self.source = VideoSource(src)
-      let itemUrl = URL(string: self.source!.uri!)!
+      guard let uri = self.source?.uri, let itemUrl = URL(string: uri) else { return }
       loadVideoPlayer(itemUrl: itemUrl)
     }
   }
 
-  @objc var autoplay: Bool = Bool() {
+  @objc var autoplay: Bool = false {
     didSet {
       self.videoAutoplay = autoplay
-      let player = self.playerView?.player
-      if (autoplay && (player?.rate == 0 || player?.error != nil)) {
-        player?.play()
+      if let player = self.playerView?.player, autoplay && (player.rate == 0 || player.error != nil) {
+        player.play()
       }
     }
   }
 
   func loadVideoPlayer(itemUrl: URL) {
-    if (self.playerView == nil) {
-      let playerView = AVPlayerView(frame: CGRect(origin: .zero, size: .zero))
+    if self.playerView == nil {
+      let playerView = AVPlayerView(frame: .zero)
       addSubview(playerView)
 
       // Use Auto Layout anchors to center our playerView
@@ -67,21 +66,23 @@ class TransparentVideoView : UIView {
         playerView.trailingAnchor.constraint(equalTo: self.trailingAnchor)
       ])
 
-      // Setup our playerLayer to hold a pixel buffer format with "alpha"
+      // Setup playerLayer to hold a pixel buffer format with "alpha"
       let playerLayer: AVPlayerLayer = playerView.playerLayer
       playerLayer.pixelBufferAttributes = [
-          (kCVPixelBufferPixelFormatTypeKey as String): kCVPixelFormatType_32BGRA]
+        (kCVPixelBufferPixelFormatTypeKey as String): kCVPixelFormatType_32BGRA
+      ]
 
-      // Setup looping on our video
+      // Setup looping for video
       playerView.isLoopingEnabled = self.videoLoop ?? true
 
-      NotificationCenter.default.addObserver(self, selector: #selector(appEnteredBackgound), name: UIApplication.didEnterBackgroundNotification, object: nil)
+      // Observers for app lifecycle
+      NotificationCenter.default.addObserver(self, selector: #selector(appEnteredBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
       NotificationCenter.default.addObserver(self, selector: #selector(appEnteredForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
 
       self.playerView = playerView
     }
 
-    // Load our player item
+    // Load player item
     loadItem(url: itemUrl)
   }
 
@@ -95,73 +96,51 @@ class TransparentVideoView : UIView {
   // MARK: - Player Item Configuration
 
   private func loadItem(url: URL) {
-    setUpAsset(with: url) { [weak self] (asset: AVAsset) in
+    setUpAsset(with: url) { [weak self] asset in
       self?.setUpPlayerItem(with: asset)
     }
   }
 
-  private func setUpAsset(with url: URL, completion: ((_ asset: AVAsset) -> Void)?) {
+  private func setUpAsset(with url: URL, completion: @escaping (AVAsset) -> Void) {
     let asset = AVAsset(url: url)
     asset.loadValuesAsynchronously(forKeys: ["metadata"]) {
       var error: NSError? = nil
       let status = asset.statusOfValue(forKey: "metadata", error: &error)
       switch status {
       case .loaded:
-        completion?(asset)
+        completion(asset)
       case .failed:
-        print(".failed")
+        print("Asset loading failed.")
       case .cancelled:
-        print(".cancelled")
+        print("Asset loading cancelled.")
       default:
-              print("default")
-          }
-      }
-  }
-
-  private func setUpPlayerItem(with asset: AVAsset) {
-    DispatchQueue.main.async { [weak self] in
-      let playerItem = AVPlayerItem(asset: asset)
-      playerItem.seekingWaitsForVideoCompositionRendering = true
-      // Apply a video composition (which applies our custom filter)
-      playerItem.videoComposition = self?.createVideoComposition(for: asset)
-
-      self?.playerView!.loadPlayerItem(playerItem) { result in
-        switch result {
-        case .failure(let error):
-          return print("Something went wrong when loading our video", error)
-
-        case .success(let player) where self?.videoAutoplay == true:
-          // Finally, we can start playing
-          player.play()
-
-        case .success(let player):
-          // Finally, we can start playing
-          player.pause()
-        }
+        print("Asset loading default case.")
       }
     }
   }
 
-  override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-    if keyPath == #keyPath(AVPlayerItem.status) {
-      let status: AVPlayerItem.Status
-      if let statusNumber = change?[.newKey] as? NSNumber {
-        status = AVPlayerItem.Status(rawValue: statusNumber.intValue)!
-      } else {
-        status = .unknown
-      }
-      // Switch over status value
-      switch status {
-      case .readyToPlay:
-        print(".readyToPlay")
-      case .failed:
-        print(".failed")
-      case .unknown:
-        print(".unknown")
-      @unknown default:
-        print("@unknown default")
+  private func setUpPlayerItem(with asset: AVAsset) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      let playerItem = AVPlayerItem(asset: asset)
+      playerItem.seekingWaitsForVideoCompositionRendering = true
+
+      // Apply a custom video composition filter
+      playerItem.videoComposition = self.createVideoComposition(for: asset)
+
+      self.playerView?.loadPlayerItem(playerItem) { result in
+        switch result {
+        case .failure(let error):
+          print("Failed to load video:", error)
+        case .success(let player):
+          if self.videoAutoplay ?? false {
+            player.play() // Autoplay when ready
+          } else {
+            player.pause() // Don't play if autoplay is off
           }
+        }
       }
+    }
   }
 
   func createVideoComposition(for asset: AVAsset) -> AVVideoComposition {
@@ -172,7 +151,7 @@ class TransparentVideoView : UIView {
         let outputImage = try filter.process(inputImage, mask: maskImage)
         return request.finish(with: outputImage, context: nil)
       } catch {
-        os_log("Video composition error: %s", String(describing: error))
+        os_log("Error processing video composition: %@", error.localizedDescription)
         return request.finish(with: error)
       }
     })
@@ -181,12 +160,13 @@ class TransparentVideoView : UIView {
     return composition
   }
 
-  // MARK: - Lifecycle callbacks
+  // MARK: - Lifecycle Callbacks
 
-  @objc func appEnteredBackgound() {
-    if let tracks = self.playerView?.player?.currentItem?.tracks {
+  @objc func appEnteredBackground() {
+    if let player = self.playerView?.player,
+        let tracks = player.currentItem?.tracks {
       for track in tracks {
-        if (track.assetTrack?.hasMediaCharacteristic(AVMediaCharacteristic.visual))! {
+        if track.assetTrack?.hasMediaCharacteristic(.visual) == true {
           track.isEnabled = false
         }
       }
@@ -194,9 +174,10 @@ class TransparentVideoView : UIView {
   }
 
   @objc func appEnteredForeground() {
-    if let tracks = self.playerView?.player?.currentItem?.tracks {
+    if let player = self.playerView?.player,
+        let tracks = player.currentItem?.tracks {
       for track in tracks {
-        if (track.assetTrack?.hasMediaCharacteristic(AVMediaCharacteristic.visual))! {
+        if track.assetTrack?.hasMediaCharacteristic(.visual) == true {
           track.isEnabled = true
         }
       }

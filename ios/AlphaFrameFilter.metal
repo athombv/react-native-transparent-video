@@ -3,7 +3,6 @@
 //  MyTransparentVideoExample
 //
 //  Created by Quentin Fasquel on 22/03/2020.
-//  Updated by ChatGPT on [Date].
 //
 
 #include <metal_stdlib>
@@ -16,7 +15,7 @@ extern "C" {
 
 /**
  * Alpha blending filter that combines a source texture with a mask.
- * Opacity is floored to zero if below a fixed threshold (0.2).
+ * Opacity is floored to zero if below a fixed threshold (0.5).
  */
 float4 alphaFrame(texture2d<float, access::sample> source,
                   texture2d<float, access::sample> mask,
@@ -25,8 +24,8 @@ float4 alphaFrame(texture2d<float, access::sample> source,
     float4 color = source.sample(s, source.sample_position());
     float opacity = mask.sample(s, mask.sample_position()).r;
 
-    // Apply the fixed opacity threshold (0.2)
-    float flooredOpacity = select(0.0f, opacity, opacity > 0.2f);
+    // Apply the fixed opacity threshold (0.5)
+    float flooredOpacity = select(0.0f, opacity, opacity > 0.5f);
 
     // Return the final color with adjusted alpha
     return float4(color.rgb, flooredOpacity);

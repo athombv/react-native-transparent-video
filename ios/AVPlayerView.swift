@@ -33,7 +33,7 @@ public class AVPlayerView: UIView {
     }
 
     private var playerItemStatusObserver: NSKeyValueObservation?
-    private var didPlayToEndTimeObserver: NSObjectProtocol? = nil {
+    private var didPlayToEndTimeObserver: NSObjectProtocol? {
         willSet {
             // Automatically remove the old observer before setting a new one.
             if let observer = didPlayToEndTimeObserver, didPlayToEndTimeObserver !== newValue {
@@ -41,7 +41,8 @@ public class AVPlayerView: UIView {
             }
         }
     }
-    private(set) var playerItem: AVPlayerItem? = nil {
+
+    private(set) var playerItem: AVPlayerItem? {
         didSet {
             setupLooping()
         }
@@ -70,9 +71,7 @@ public class AVPlayerView: UIView {
         // Prevent video player from disabling display sleep when idle
         if #available(iOS 12.0, *) {
             player.preventsDisplaySleepDuringVideoPlayback = false
-        } else {
-            // Fallback on earlier versions
-        };
+        }
 
         self.player = player
         self.playerItem = playerItem
@@ -99,15 +98,22 @@ public class AVPlayerView: UIView {
 
     private func setupLooping() {
         guard isLoopingEnabled, let playerItem = self.playerItem, let player = self.player else {
+            // Remove observer if looping is disabled
+            if let observer = didPlayToEndTimeObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
             didPlayToEndTimeObserver = nil
             return
         }
 
+        // Add observer for looping when the player reaches the end
         didPlayToEndTimeObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: playerItem,
             queue: nil
-        ) { _ in
+        ) { [weak player] _ in
+            // Safely unwrapping the player reference to avoid potential retain cycles
+            guard let player = player else { return }
             player.seek(to: .zero) { _ in
                 player.play()
             }
