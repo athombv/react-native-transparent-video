@@ -86,7 +86,7 @@
                                                                                                               // from
                                                                                                               // second
                                                                                                               // part
-             "  gl_FragColor = vec4(color.rgb, alpha > 0.2 ? alpha : 0.0);\n" + // Use alpha if greater than 0.2
+             "  gl_FragColor = vec4(color.rgb, alpha > 0.5 ? alpha : 0.0);\n" + // Use alpha if greater than 0.5
              "}\n";
 
      private double accuracy = 0.95;
