@@ -66,7 +66,13 @@ public class AVPlayerView: UIView {
 
         // Configure player settings
         player.isMuted = true
-        player.preventsDisplaySleepDuringVideoPlayback = false
+
+        // Prevent video player from disabling display sleep when idle
+        if #available(iOS 12.0, *) {
+            player.preventsDisplaySleepDuringVideoPlayback = false
+        } else {
+            // Fallback on earlier versions
+        };
 
         self.player = player
         self.playerItem = playerItem

@@ -13,74 +13,71 @@ typealias AlphaFrameFilterError = AlphaFrameFilter.Error
 final class AlphaFrameFilter: CIFilter {
 
     enum Error: Swift.Error {
-        /// This error is thrown  when using renderingMode `builtInFilter` and the filter named *CIBlendWithMask* was not found
+        /// Thrown when `CIBlendWithMask` filter is not found in `builtInFilter` rendering mode.
         case buildInFilterNotFound
-        /// This error is thrown when `inputImage` and `maskImage` have different **extents**
+        /// Thrown when the extents of `inputImage` and `maskImage` are not compatible.
         case incompatibleExtents
-        /// This error is thrown when a kernel couldn't be initialized,
-        /// which may happen when using renderingMode `colorKernel` or `metalKernel`
+        /// Thrown when kernel initialization fails in `colorKernel` or `metalKernel` rendering modes.
         case invalidKernel
-        /// This error is thrown when `inputImage` or `maskImage` is missing
+        /// Thrown when either `inputImage` or `maskImage` is missing.
         case invalidParameters
-        /// This error would be thrown when output image is `nil` in any other case, it typically should not happen
+        /// Thrown in unexpected situations when the output image is `nil`.
         case unknown
     }
-    
+
     private(set) var inputImage: CIImage?
     private(set) var maskImage: CIImage?
     private(set) var outputError: Swift.Error?
 
     private let renderingMode: RenderingMode
-    
+
     required init(renderingMode: RenderingMode) {
         self.renderingMode = renderingMode
         super.init()
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
     override var outputImage: CIImage? {
-        // Output is nil if an input image and a mask image aren't provided
+        // Validate input and mask images before rendering
         guard let inputImage = inputImage, let maskImage = maskImage else {
             outputError = Error.invalidParameters
             return nil
         }
 
-        // Input image & mask image should have the same extent
+        // Ensure both images have the same extent
         guard inputImage.extent == maskImage.extent else {
             outputError = Error.incompatibleExtents
             return nil
         }
 
         outputError = nil
-
         return render(using: renderingMode, inputImage: inputImage, maskImage: maskImage)
     }
-    
+
     func process(_ inputImage: CIImage, mask maskImage: CIImage) throws -> CIImage {
         self.inputImage = inputImage
         self.maskImage = maskImage
-        
+
         guard let outputImage = self.outputImage else {
             throw outputError ?? Error.unknown
         }
 
         return outputImage
     }
-    
+
     // MARK: - Rendering
-    
+
     enum RenderingMode {
         case builtInFilter
         case colorKernel
         case metalKernel
     }
-    
+
     private static var colorKernel: CIColorKernel? = {
-        // `init(source:)` was deprecated in iOS 12.0: Core Image Kernel Language API deprecated.
-        // This warning is silent because of preprocessor macro `CI_SILENCE_GL_DEPRECATION`
+        // Deprecated API: init(source:) in iOS 12.0, silent due to preprocessor macro `CI_SILENCE_GL_DEPRECATION`
         return CIColorKernel(source: """
 kernel vec4 alphaFrame(__sample s, __sample m) {
     return vec4( s.rgb, m.r );
@@ -90,8 +87,12 @@ kernel vec4 alphaFrame(__sample s, __sample m) {
 
     private static var metalKernelError: Swift.Error?
     private static var metalKernel: CIKernel? = {
-        do { return try CIKernel(functionName: "alphaFrame") }
-        catch { metalKernelError = error; return nil }
+        do {
+            return try CIKernel(functionName: "alphaFrame")
+        } catch {
+            metalKernelError = error
+            return nil
+        }
     }()
 
     private func render(using renderingMode: RenderingMode, inputImage: CIImage, maskImage: CIImage) -> CIImage? {
@@ -111,18 +112,18 @@ kernel vec4 alphaFrame(__sample s, __sample m) {
             return filter.outputImage
 
         case .colorKernel:
-            // Force a fatal error if our kernel source isn't correct
+            // Check for valid kernel before using it
             guard let colorKernel = Self.colorKernel else {
                 outputError = Error.invalidKernel
                 return nil
             }
 
-            // Apply our color kernel with the proper parameters
             let outputExtent = inputImage.extent
             let arguments = [inputImage, maskImage]
             return colorKernel.apply(extent: outputExtent, arguments: arguments)
 
         case .metalKernel:
+            // Check for valid kernel before applying
             guard let metalKernel = Self.metalKernel else {
                 outputError = Self.metalKernelError ?? Error.invalidKernel
                 return nil
