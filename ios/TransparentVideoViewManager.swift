@@ -1,10 +1,11 @@
 import AVFoundation
 import os.log
+import React
 
 @objc(TransparentVideoViewManager)
 class TransparentVideoViewManager: RCTViewManager {
 
-  override func view() -> TransparentVideoView {
+  override func view() -> UIView {
     return TransparentVideoView()
   }
 
@@ -17,26 +18,22 @@ class TransparentVideoView: UIView {
 
   private var source: VideoSource?
   private var playerView: AVPlayerView?
-  private var videoAutoplay: Bool?
-  private var videoLoop: Bool?
+  private var videoAutoplay: Bool = false
+  private var videoLoop: Bool = false
 
   @objc var loop: Bool = false {
     didSet {
-      // Set up looping behavior
-      if let playerView = self.playerView {
-        playerView.isLoopingEnabled = loop
+      self.videoLoop = loop
+      self.playerView?.isLoopingEnabled = loop
 
-        // Start playing immediately if autoplay is enabled and loop is set
-        if loop && (playerView.player?.rate == 0 || playerView.player?.error != nil) {
-          playerView.player?.play()
-        }
+      if loop, let player = self.playerView?.player, player.rate == 0 || player.error != nil {
+        player.play()
       }
     }
   }
 
   @objc var src: NSDictionary = NSDictionary() {
     didSet {
-      // Update the video source and reload video
       self.source = VideoSource(src)
       guard let uri = self.source?.uri, let itemUrl = URL(string: uri) else { return }
       loadVideoPlayer(itemUrl: itemUrl)
@@ -46,7 +43,7 @@ class TransparentVideoView: UIView {
   @objc var autoplay: Bool = false {
     didSet {
       self.videoAutoplay = autoplay
-      if let player = self.playerView?.player, autoplay && (player.rate == 0 || player.error != nil) {
+      if autoplay, let player = self.playerView?.player, player.rate == 0 || player.error != nil {
         player.play()
       }
     }
@@ -57,7 +54,6 @@ class TransparentVideoView: UIView {
       let playerView = AVPlayerView(frame: .zero)
       addSubview(playerView)
 
-      // Use Auto Layout anchors to center our playerView
       playerView.translatesAutoresizingMaskIntoConstraints = false
       NSLayoutConstraint.activate([
         playerView.topAnchor.constraint(equalTo: self.topAnchor),
@@ -66,34 +62,33 @@ class TransparentVideoView: UIView {
         playerView.trailingAnchor.constraint(equalTo: self.trailingAnchor)
       ])
 
-      // Setup playerLayer to hold a pixel buffer format with "alpha"
       let playerLayer: AVPlayerLayer = playerView.playerLayer
       playerLayer.pixelBufferAttributes = [
         (kCVPixelBufferPixelFormatTypeKey as String): kCVPixelFormatType_32BGRA
       ]
 
-      // Setup looping for video
-      playerView.isLoopingEnabled = self.videoLoop ?? true
+      playerView.isLoopingEnabled = self.videoLoop
 
-      // Observers for app lifecycle
       NotificationCenter.default.addObserver(self, selector: #selector(appEnteredBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
       NotificationCenter.default.addObserver(self, selector: #selector(appEnteredForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
 
       self.playerView = playerView
     }
 
-    // Load player item
     loadItem(url: itemUrl)
   }
 
   deinit {
+    // Remove specific observers
+    NotificationCenter.default.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
+    NotificationCenter.default.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
+
+    // Stop and remove player resources
     playerView?.player?.pause()
     playerView?.player?.replaceCurrentItem(with: nil)
     playerView?.removeFromSuperview()
     playerView = nil
   }
-
-  // MARK: - Player Item Configuration
 
   private func loadItem(url: URL) {
     setUpAsset(with: url) { [weak self] asset in
@@ -109,10 +104,8 @@ class TransparentVideoView: UIView {
       switch status {
       case .loaded:
         completion(asset)
-      case .failed:
+      case .failed, .cancelled:
         print("Asset loading failed.")
-      case .cancelled:
-        print("Asset loading cancelled.")
       default:
         print("Asset loading default case.")
       }
@@ -125,7 +118,6 @@ class TransparentVideoView: UIView {
       let playerItem = AVPlayerItem(asset: asset)
       playerItem.seekingWaitsForVideoCompositionRendering = true
 
-      // Apply a custom video composition filter
       playerItem.videoComposition = self.createVideoComposition(for: asset)
 
       self.playerView?.loadPlayerItem(playerItem) { result in
@@ -133,10 +125,10 @@ class TransparentVideoView: UIView {
         case .failure(let error):
           print("Failed to load video:", error)
         case .success(let player):
-          if self.videoAutoplay ?? false {
-            player.play() // Autoplay when ready
+          if self.videoAutoplay {
+            player.play()
           } else {
-            player.pause() // Don't play if autoplay is off
+            player.pause()
           }
         }
       }
@@ -160,11 +152,9 @@ class TransparentVideoView: UIView {
     return composition
   }
 
-  // MARK: - Lifecycle Callbacks
-
   @objc func appEnteredBackground() {
     if let player = self.playerView?.player,
-        let tracks = player.currentItem?.tracks {
+       let tracks = player.currentItem?.tracks {
       for track in tracks {
         if track.assetTrack?.hasMediaCharacteristic(.visual) == true {
           track.isEnabled = false
@@ -175,7 +165,7 @@ class TransparentVideoView: UIView {
 
   @objc func appEnteredForeground() {
     if let player = self.playerView?.player,
-        let tracks = player.currentItem?.tracks {
+       let tracks = player.currentItem?.tracks {
       for track in tracks {
         if track.assetTrack?.hasMediaCharacteristic(.visual) == true {
           track.isEnabled = true

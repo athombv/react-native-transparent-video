@@ -1,5 +1,9 @@
-import React from 'react';
-import { requireNativeComponent, StyleProp, ViewStyle } from 'react-native';
+import React, { useRef } from 'react';
+import {
+  requireNativeComponent,
+  StyleProp,
+  ViewStyle,
+} from 'react-native';
 // @ts-ignore
 import resolveAssetSource from 'react-native/Libraries/Image/resolveAssetSource';
 
@@ -8,35 +12,38 @@ type TransparentVideoProps = {
   source?: any;
   loop?: boolean;
   autoplay?: boolean;
+  onProgress?: (progress: number) => void;
 };
 
 const ComponentName = 'TransparentVideoView';
-
 const TransparentVideoView = requireNativeComponent(ComponentName);
 
-class TransparentVideo extends React.PureComponent<TransparentVideoProps> {
-  render() {
-    const source = resolveAssetSource(this.props.source) || {
-      uri: this.props.source,
-    };
-    let uri = source.uri || '';
-    if (uri && uri.match(/^\//)) {
-      uri = `file://${uri}`;
-    }
+/**
+ * TransparentVideo component for rendering a transparent video.
+ */
+const TransparentVideo = (props: TransparentVideoProps) => {
+  const videoRef = useRef<any>(null);
 
-    const nativeProps = Object.assign({ loop: true }, this.props);
-    Object.assign(nativeProps, {
-      style: nativeProps.style,
-      src: {
-        uri,
-        type: source.type || '',
-      },
-      autoplay: nativeProps.autoplay ?? true,
-      loop: nativeProps.loop ?? true,
-    });
+  // Resolving source URI from the props
+  const source = resolveAssetSource(props.source) || { uri: props.source };
+  let uri = source.uri || '';
 
-    return <TransparentVideoView {...nativeProps} />;
+  // Adding "file://" prefix for local URIs
+  if (uri && uri.match(/^\//)) {
+    uri = `file://${uri}`;
   }
-}
+
+  // Preparing props for the native component
+  const nativeProps = {
+    ...props,
+    ref: videoRef,
+    style: props.style,
+    src: { uri, type: source.type || '' },
+    autoplay: props.autoplay ?? true,
+    loop: props.loop ?? true,
+  };
+
+  return <TransparentVideoView {...nativeProps} />;
+};
 
 export default TransparentVideo;
